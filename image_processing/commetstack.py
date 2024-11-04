@@ -98,6 +98,26 @@ def estimate_and_subtrack_background(img, func):
           img2[i,j,k] = 0
   return img2, img3
 
+def low_freq(img):
+  fft_img = np.fft.fft2(img)
+  shift_fft_img=np.fft.fftshift(fft_img)
+  
+  h,w = shift_fft_img.shape
+  R=10
+  mask = np.zeros((h,w))
+  for x in range(0,h):
+    for y in range(0,w):
+      if (x-h/2)**2 + (y-w)**2 >R**2:
+        mask[x,y] = 1 
+
+  img_fft_mask = shift_fft_img*mask
+  shift_fft_img=np.fft.fftshift(img_fft_mask)
+  img = np.fft.ifft2(shift_fft_img)
+  img = img.real.astype(np.uint8)
+  #cv2.imshow("fft", cv2.resize(img.astype(np.uint8), (int(img.shape[1]*0.5), int(img.shape[0]*0.5))))
+  #cv2.waitKey(50)
+  return np.stack((img, img,img),2)
+  
 
 def estimate_and_subtrack_background2(img, func):
   x,y,z = extract_representative_points(img)
@@ -118,21 +138,53 @@ def estimate_and_subtrack_background2(img, func):
   return img.astype(np.uint8), base2.astype(np.uint8)
 
 def matching(img,templ, left_upper, area_size): #元画像、テンプレート画像、テンプレート画像が切り出されたときの左上座標、捜索ウィンドウサイズ
-  templ_size=np.array([templ.shape[0], templ.shape[1]])
-  img_left_upper = left_upper+templ_size/2-area_size/2
-  mask = np.zeros(img.shape,dtype = np.uint8)
-  mask = cv2.rectangle(mask, (int(img_left_upper[0]),int(img_left_upper[1])), (int(img_left_upper[0]+area_size[0]),int(img_left_upper[1]+area_size[1])), (255, 255, 255), -1)
   
-  result = cv2.matchTemplate(img,                  #対象画像
-                            templ,                #テンプレート画像
-                            cv2.TM_CCOEFF_NORMED  #類似度の計算方法
-                            )
-
+  imgs = [img] #回転させた画像を入れる
+  angles = [0]
+  vals = []
+  maxLocs = []
+  theta_max = 0.01
+  num = 10
+  
+  width = img.shape[1]
+  height = img.shape[0]
+  
+  for i in range(int(num/2)):
+    angle = (i+1)*theta_max/(num/2)
+    
+    M = cv2.getRotationMatrix2D((width/2,height/2),angle,1)
+    afin_img = cv2.warpAffine(img.astype(np.float32), M.astype(np.float32), (width, height))
+    imgs.append(afin_img)
+    angles.append(angle)
+    
+    M = cv2.getRotationMatrix2D((width/2,height/2),-angle,1)
+    afin_img = cv2.warpAffine(img.astype(np.float32), M.astype(np.float32), (width, height))
+    imgs.append(afin_img)
+    angles.append(-angle)
+    
+  #templ_size=np.array([templ.shape[0], templ.shape[1]])
+  #img_left_upper = left_upper+templ_size/2-area_size/2
+  #mask = np.zeros(img.shape,dtype = np.uint8)
+  #mask = cv2.rectangle(mask, (int(img_left_upper[0]),int(img_left_upper[1])), (int(img_left_upper[0]+area_size[0]),int(img_left_upper[1]+area_size[1])), (255, 255, 255), -1)
+  
+  for img_rot in imgs:
+    result = cv2.matchTemplate(img_rot.astype(np.uint8),                  #対象画像
+                              templ,                #テンプレート画像
+                              cv2.TM_CCOEFF_NORMED  #類似度の計算方法
+                              )
+    minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+    vals.append(maxVal)
+    maxLocs.append(maxLoc)
+  
+  max_index = np.argmax(np.array(vals))
+  maxLoc=[maxLocs[max_index]]
+  max_angle = angles[max_index]
+  """
   #類似度の閾値
   threshold =0.90
   #類似度が閾値以上の座標を取得
   match_y, match_x = np.where(result >= threshold)
-  minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+
 
   #テンプレート画像のサイズ
   w = templ.shape[1]
@@ -156,18 +208,21 @@ def matching(img,templ, left_upper, area_size): #元画像、テンプレート�
                 (0,0,225),  #線の色
                 2           #線の太さ
                 )
-  
+  """
   #plt.imshow(cv2.cvtColor(dst,cv2.COLOR_BGR2RGB))
   #plt.show()
-  return np.array([maxLoc[1],maxLoc[0]])
+  return np.array([maxLoc[0][1],maxLoc[0][0]]), max_angle
 
 
-def stack(img_base, img, x, y,i):
+def stack(img_base, img, x, y, angle, i):
+  
   affin_mat = np.array([[1, 0, y],
                    [0, 1, x]])
   width = img.shape[1]
   height = img.shape[0]
-
+  
+  M = cv2.getRotationMatrix2D((width/2,height/2),-angle,1)
+  afin_img = cv2.warpAffine(img.astype(np.float32), M.astype(np.float32), (width, height))
   afin_img = cv2.warpAffine(img.astype(np.float32), affin_mat.astype(np.float32), (width, height))
   print(afin_img.dtype)
   
@@ -191,34 +246,34 @@ for i in range(len(files)):
   tone_list_linear = tone_curve_linear(min, max)
 
   img2 = cv2.LUT(img, tone_list_linear)
+  
+  img_subtracted = low_freq(img2[:,:,0])
 
-  img_subtracted, img_background2 = estimate_and_subtrack_background2(img2, func_3)
+  #img_subtracted, img_background2 = estimate_and_subtrack_background2(img2, func_3)
+  
   #cv2.imshow("subtracted", cv2.resize(img_subtracted, (int(img_subtracted.shape[1]*0.5), int(img_subtracted.shape[0]*0.5))) )
   #cv2.waitKey(500)
   #cv2.imshow("", cv2.resize(img_background2, (int(img_subtracted.shape[1]*0.5), int(img_background2.shape[0]*0.5))) )
   #cv2.waitKey(2000)
   
   if i == 0:
-    left_upper = np.array([530,1700])
+    left_upper = np.array([550,1620])
     dx=0
     dy=0
+    angle = 0
   else:
-    left_upper2 = matching(img_subtracted, img_cropped, left_upper,np.array([600,600]))
+    left_upper2, angle = matching(img_subtracted, img_cropped, left_upper,np.array([600,600]))
     print(left_upper)
     dx = left_upper2[0]-left_upper[0] 
     dy = left_upper2[1]-left_upper[1] 
   
-
-    
-  #plot_hist(img_subtracted,0,True)
-
-  #cv2.imwrite(r"C:\Users\riopo\Downloads\test.png",img_subtracted)
+  print("dx,dy,angle=", dx,dy,angle)
   
-  stack(img_base, img_subtracted, -dx, -dy,i)
+  stack(img_base, img_subtracted, -dx, -dy, angle, i)
   left_upper_pre = left_upper
   if i%20 == 0:
     cv2.imwrite(r"C:/Users/riopo/Downloads/"+str(i)+".png" ,(img_base/(i+1)).astype(np.uint8))
   
-  img_cropped = crop((img_base/(i+1)).astype(np.uint8), left_upper, 100,200)
+  img_cropped = crop((img_base/(i+1)).astype(np.uint8), left_upper, 150,250)
   cv2.imshow("", img_cropped )
   cv2.waitKey(50)
