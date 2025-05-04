@@ -131,7 +131,7 @@ class cameras():
         self.folder_path=path #保存フォルダ
         self.num=num #１回の検知処理に使うフレーム数
         
-        self.regular_record_interval = 60*60*0 + 60*15 + 0 #定時記録の間隔を秒で指定
+        self.regular_record_interval = 60*60*0 + 60*0 + 5 #定時記録の間隔を秒で指定
         
         #定時記録を保存するパス
         self.regular_record_path = self.folder_path + "/regular_record"
@@ -140,12 +140,17 @@ class cameras():
         except:
             pass
         
+        self.start_time = "20:00" #撮影開始時刻
+        self.end_time = "04:00" #撮影終了時刻
         
+    def is_night(self): #夜間のみ動くように判定を入れる
+        """夜間の場合にTrueを返す"""
+        now = datetime.datetime.now().time()
+        return now >= datetime.datetime.strptime(self.start_time, "%H:%M").time() or now < datetime.datetime.strptime(self.end_time, "%H:%M").time()
 
     def organize_frames(self):
         while(True):
             time.sleep(0.2)
-            print(self.frames_to_be_saved)
             if len(self.frames_to_be_saved)!=0:
                 self.save_frames()
             
@@ -153,19 +158,21 @@ class cameras():
         with lock:
             ftbs = self.frames_to_be_saved.copy()
             fotbs = self.folders_to_be_saved.copy()
+            fitbs = self.files_to_be_saved.copy()
             self.frames_to_be_saved = []
             self.folders_to_be_saved = []
+            self.files_to_be_saved = []
             
-        print("saving...", ftbs, fotbs)
         for i in range(len(ftbs)): 
             try:   
                 os.mkdir(fotbs[i])
             except:
                 pass
             for j in range(len(ftbs[i])):
-                
-                cv2.imwrite(fotbs[i]+"/"+str(j)+".png" ,ftbs[i][j])
-                           
+                try:
+                    cv2.imwrite(fotbs[i]+"/"+str(fitbs[i][j])+".jpg" ,ftbs[i][j], [cv2.IMWRITE_JPEG_QUALITY, 80])
+                except:
+                    pass
                    
     def read_imgs(self, folder_path):
         files=glob.glob(folder_path)
@@ -242,31 +249,41 @@ class cameras():
         last_regular_record_time = datetime.datetime.now() #最後に経過を記録した時間
         
         while(1):
-            dt_now = datetime.datetime.now() #現在時刻取得
-            ret, frame = capture.read()
-            img_list.append(frame)
-            
-            #検知に必要な枚数がたまったら処理開始
-            if len(img_list)>num-1:
+            try:
+                if self.is_night() == False:
+                    continue
+                
+                dt_now = datetime.datetime.now() #現在時刻取得
+                ret, frame = capture.read()
+                img_list.append(frame)
+                
+                #検知に必要な枚数がたまったら処理開始
+                if len(img_list)>num-1:
 
-                result, diff_img = self.image_processer.detect_meteor(img_list)       
-                
-                cv2.imshow("", diff_img )
-                cv2.waitKey(1)
-                
-                if result == True:#検知した時
+                    result, diff_img = self.image_processer.detect_meteor(img_list)       
+                    
+                    cv2.imshow("", diff_img )
+                    cv2.waitKey(1)
+                    
+                    if result == True:#検知した時
+                        with lock:
+                            self.frames_to_be_saved.append(img_list)
+                            self.folders_to_be_saved.append(self.folder_path + "/"+ dt_now.strftime('%d-%H_%M_%S'))
+                            self.files_to_be_saved.append(np.arange(0,num))
+                    img_list = []
+
+                #定時記録
+                if (dt_now - last_regular_record_time).seconds > self.regular_record_interval:
                     with lock:
-                        self.frames_to_be_saved.append(img_list)
-                        self.folders_to_be_saved.append(self.folder_path + "/"+ dt_now.strftime('%d-%H_%M_%S'))
-                img_list = []
-
-            #定時記録
-            if (dt_now - last_regular_record_time).seconds > self.regular_record_interval and len(files)!=0:
-                with lock:
-                    self.frames_to_be_saved.append([img_list[-1]])
-                    self.folders_to_be_saved.append(self.regular_record_path)
-                last_regular_record_time = dt_now   
-                  
+                        self.frames_to_be_saved.append([frame])
+                        self.folders_to_be_saved.append(self.regular_record_path)
+                        self.files_to_be_saved.append([dt_now.strftime('%d-%H_%M_%S')])
+                    last_regular_record_time = dt_now
+                time.sleep(0.01)   
+                
+            except:
+                print("Error in while loop")
+                pass
 
 
 
@@ -282,6 +299,12 @@ class cameras():
         regular_recorded_file=""#削除予定ファイル名に追加しないようにするために必要
         
         while(1):
+            
+            try:
+                if self.is_night() == False:
+                    continue
+            except:
+                pass
             files = self.read_imgs(folder_path + "/*png*")
             
             latest_picture_index = self.read_file_index(files[-1])
