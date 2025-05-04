@@ -20,7 +20,7 @@ port = 8000
 class Process_image():
     
     def __init__(self):
-        self.min_length = 10
+        self.min_length = 20
         self.save_path = ""
         
     def detect_line(self, img, min_length):
@@ -118,11 +118,18 @@ class Process_image():
 class cameras():
     def __init__(self, path, num):
         self.image_processer = Process_image()
+        
+        #--- Sharpcap使用時に、画像保存に使用する ---
         self.files_to_be_del = []#削除する（流星が移っていないファイル）
         self.files_to_be_saved = []#保存するファイル（写ってるやつ）
-        self.folders_to_be_saved = [] #各写真を保存するフォルダ名を入れる（時刻）
-        self.folder_path=path
-        self.num=num
+        
+        #--- atomcam rtsp時に、画像保存に使用する ---
+        self.frames_to_be_saved = [] #保存する画像データ（検出画像or定時記録）
+        
+        
+        self.folders_to_be_saved = [] #各写真を保存するフォルダ名を入れる（時刻）        
+        self.folder_path=path #保存フォルダ
+        self.num=num #１回の検知処理に使うフレーム数
         
         self.regular_record_interval = 60*60*0 + 60*15 + 0 #定時記録の間隔を秒で指定
         
@@ -132,15 +139,42 @@ class cameras():
             os.mkdir(self.regular_record_path)
         except:
             pass
+        
+        
+
+    def organize_frames(self):
+        while(True):
+            time.sleep(0.2)
+            print(self.frames_to_be_saved)
+            if len(self.frames_to_be_saved)!=0:
+                self.save_frames()
+            
+    def save_frames(self):
+        with lock:
+            ftbs = self.frames_to_be_saved.copy()
+            fotbs = self.folders_to_be_saved.copy()
+            self.frames_to_be_saved = []
+            self.folders_to_be_saved = []
+            
+        print("saving...", ftbs, fotbs)
+        for i in range(len(ftbs)): 
+            try:   
+                os.mkdir(fotbs[i])
+            except:
+                pass
+            for j in range(len(ftbs[i])):
+                
+                cv2.imwrite(fotbs[i]+"/"+str(j)+".png" ,ftbs[i][j])
+                           
+                   
     def read_imgs(self, folder_path):
         files=glob.glob(folder_path)
         return files
     
-
     
     def organize_files(self):
         while True:
-            time.sleep(0.5)
+            time.sleep(0.1)
             #print(self.files_to_be_del)
             if len(self.files_to_be_del)!=0:
                 self.delete_pictures()
@@ -197,6 +231,44 @@ class cameras():
     def read_file_base(self, filename):
         file_base = filename.split("_")[0]
         return file_base
+    
+    def rtsp_live(self):
+        capture = cv2.VideoCapture('rtsp://6199:4003@192.168.137.20/live')
+        #sharpcapがフォルダに保存した画像をリアルタイムに取得して処理する関数
+        folder_path=self.folder_path
+        
+        num=self.num
+        img_list=[]
+        last_regular_record_time = datetime.datetime.now() #最後に経過を記録した時間
+        
+        while(1):
+            dt_now = datetime.datetime.now() #現在時刻取得
+            ret, frame = capture.read()
+            img_list.append(frame)
+            
+            #検知に必要な枚数がたまったら処理開始
+            if len(img_list)>num-1:
+
+                result, diff_img = self.image_processer.detect_meteor(img_list)       
+                
+                cv2.imshow("", diff_img )
+                cv2.waitKey(1)
+                
+                if result == True:#検知した時
+                    with lock:
+                        self.frames_to_be_saved.append(img_list)
+                        self.folders_to_be_saved.append(self.folder_path + "/"+ dt_now.strftime('%d-%H_%M_%S'))
+                img_list = []
+
+            #定時記録
+            if (dt_now - last_regular_record_time).seconds > self.regular_record_interval and len(files)!=0:
+                with lock:
+                    self.frames_to_be_saved.append([img_list[-1]])
+                    self.folders_to_be_saved.append(self.regular_record_path)
+                last_regular_record_time = dt_now   
+                  
+
+
 
     def sharpcap_live(self):
         #sharpcapがフォルダに保存した画像をリアルタイムに取得して処理する関数
@@ -281,9 +353,13 @@ class cameras():
             print(receive + "\n")
         s.close()
 
-    def process(self):
-        thread1 = threading.Thread(target=self.sharpcap_live)
-        thread2 = threading.Thread(target=self.organize_files)
+    def process(self, camera="s"):
+        if camera=="s": #sharpcap
+            thread1 = threading.Thread(target=self.sharpcap_live)
+            thread2 = threading.Thread(target=self.organize_files)
+        elif camera=="a": #atomcam
+            thread1 = threading.Thread(target=self.rtsp_live)
+            thread2 = threading.Thread(target=self.organize_frames)     
         #thread3 = threading.Thread(target=self.socket_client_files)
         
         thread1.start()
@@ -302,4 +378,4 @@ def communicate_bot():
 path = input("folder path=")
 num = int(input("num for detection"))
 camera = cameras(path, num)
-camera.process()
+camera.process("a")
