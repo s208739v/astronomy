@@ -410,4 +410,4 @@ def communicate_bot():
 path = input("folder path=")
 num = int(input("num for detection"))
 camera = cameras(path, num)
-camera.process("s")
+camera.process("a")
