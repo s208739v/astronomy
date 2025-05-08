@@ -292,6 +292,9 @@ class cameras():
                 
             except:
                 print("Error in while loop")
+                capture.release()
+                time.sleep(1)
+                capture = cv2.VideoCapture('rtsp://6199:4003@192.168.137.20/live')
                 pass
 
 
