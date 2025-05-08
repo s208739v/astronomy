@@ -170,7 +170,8 @@ class cameras():
                 pass
             for j in range(len(ftbs[i])):
                 try:
-                    cv2.imwrite(fotbs[i]+"/"+str(fitbs[i][j])+".jpg" ,ftbs[i][j], [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    cv2.imwrite(fotbs[i]+"/"+str(fitbs[i][j])+".png" ,ftbs[i][j])
+                    #cv2.imwrite(fotbs[i]+"/"+str(fitbs[i][j])+".jpg" ,ftbs[i][j], [cv2.IMWRITE_JPEG_QUALITY, 80])
                 except:
                     pass
                    
