@@ -20,7 +20,7 @@ port = 8000
 class Process_image():
     
     def __init__(self):
-        self.min_length = 20
+        self.min_length = 10
         self.save_path = ""
         
     def detect_line(self, img, min_length):
@@ -131,7 +131,7 @@ class cameras():
         self.folder_path=path #保存フォルダ
         self.num=num #１回の検知処理に使うフレーム数
         
-        self.regular_record_interval = 60*60*0 + 60*0 + 5 #定時記録の間隔を秒で指定
+        self.regular_record_interval = 60*60*0 + 60*30 + 0 #定時記録の間隔を秒で指定
         
         #定時記録を保存するパス
         self.regular_record_path = self.folder_path + "/regular_record"
@@ -140,7 +140,7 @@ class cameras():
         except:
             pass
         
-        self.start_time = "20:00" #撮影開始時刻
+        self.start_time = "22:00" #撮影開始時刻
         self.end_time = "04:00" #撮影終了時刻
         
     def is_night(self): #夜間のみ動くように判定を入れる
@@ -253,10 +253,17 @@ class cameras():
                 if self.is_night() == False:
                     continue
                 
+                if not capture.isOpened(): #RTSPの接続が切れてた時再接続する
+                    print("Reopening RTSP connection...")
+                    capture.release()
+                    time.sleep(1)
+                    capture = cv2.VideoCapture('rtsp://6199:4003@192.168.137.20/live')
+                    continue
+                
                 dt_now = datetime.datetime.now() #現在時刻取得
                 ret, frame = capture.read()
+
                 img_list.append(frame)
-                
                 #検知に必要な枚数がたまったら処理開始
                 if len(img_list)>num-1:
 
@@ -273,6 +280,7 @@ class cameras():
                     img_list = []
 
                 #定時記録
+                
                 if (dt_now - last_regular_record_time).seconds > self.regular_record_interval:
                     with lock:
                         self.frames_to_be_saved.append([frame])
@@ -284,7 +292,6 @@ class cameras():
             except:
                 print("Error in while loop")
                 pass
-
 
 
     def sharpcap_live(self):
@@ -299,64 +306,65 @@ class cameras():
         regular_recorded_file=""#削除予定ファイル名に追加しないようにするために必要
         
         while(1):
-            
             try:
                 if self.is_night() == False:
                     continue
             except:
                 pass
-            files = self.read_imgs(folder_path + "/*png*")
-            
-            latest_picture_index = self.read_file_index(files[-1])
-            file_base = self.read_file_base(files[-1]) #写真ファイル名のインデックスの前の部分
-
-            img_list = []
-            read_files = [] #読み込むファイル
-
-            dt_now = datetime.datetime.now() #現在時刻取得
-
-
-
-            #検知に必要な枚数がたまったら処理開始
-            if (latest_picture_index - last_processed_picture_index) >num+1:
-                #print(latest_picture_index, last_processed_picture_index, latest_picture_index - last_processed_picture_index )
-                for i in range(num):
-                    filename = folder_path+"/tes_"+str(last_processed_picture_index+i)+".png"
-                    #print(filename)
-                    read_files.append(filename)
-                    img = cv2.imread(filename)
-                    im_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    img_list.append(im_gray)
-
-                result, diff_img = self.image_processer.detect_meteor(img_list)
-                last_processed_picture_index +=num             
+            try:
+                files = self.read_imgs(folder_path + "/*png*")
                 
-                cv2.imshow("", diff_img )
-                cv2.waitKey(10)
-                
-                img_list.clear()
-                #print(latest_picture_index, last_processed_picture_index, latest_picture_index - last_processed_picture_index )
-                
-                if result == True:#検知した時
-                    with lock:
-                        self.files_to_be_saved.append(read_files)
-                        self.folders_to_be_saved.append(self.folder_path + "/"+ dt_now.strftime('%d-%H_%M_%S'))
-                #定時記録
-                if (dt_now - last_regular_record_time).seconds > self.regular_record_interval and len(files)!=0:
-                    with lock:
-                        self.files_to_be_saved.append([files[-1]])
-                        self.folders_to_be_saved.append(self.regular_record_path)
-                    regular_recorded_file=files[-1]
-                    last_regular_record_time = dt_now 
-                                    
-                if result == False:#検知されなかったとき
-                    if regular_recorded_file in read_files:
-                        read_files.remove(regular_recorded_file) #定時記録用写真は削除しないように除く
-                    with lock:
-                        self.files_to_be_del+=read_files #削除予定のファイルに追加
+                latest_picture_index = self.read_file_index(files[-1])
+                file_base = self.read_file_base(files[-1]) #写真ファイル名のインデックスの前の部分
+
+                img_list = []
+                read_files = [] #読み込むファイル
+
+                dt_now = datetime.datetime.now() #現在時刻取得
+
+
+
+                #検知に必要な枚数がたまったら処理開始
+                if (latest_picture_index - last_processed_picture_index) >num+1:
+                    #print(latest_picture_index, last_processed_picture_index, latest_picture_index - last_processed_picture_index )
+                    for i in range(num):
+                        filename = folder_path+"/tes_"+str(last_processed_picture_index+i)+".png"
+                        #print(filename)
+                        read_files.append(filename)
+                        img = cv2.imread(filename)
+                        im_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                        img_list.append(im_gray)
+
+                    result, diff_img = self.image_processer.detect_meteor(img_list)
+                    last_processed_picture_index +=num             
+                    
+                    cv2.imshow("", diff_img )
+                    cv2.waitKey(1)
+                    
+                    img_list.clear()
+                    #print(latest_picture_index, last_processed_picture_index, latest_picture_index - last_processed_picture_index )
+                    
+                    if result == True:#検知した時
+                        with lock:
+                            self.files_to_be_saved.append(read_files)
+                            self.folders_to_be_saved.append(self.folder_path + "/"+ dt_now.strftime('%d-%H_%M_%S'))
+                    #定時記録
+                    if (dt_now - last_regular_record_time).seconds > self.regular_record_interval and len(files)!=0:
+                        with lock:
+                            self.files_to_be_saved.append([files[-1]])
+                            self.folders_to_be_saved.append(self.regular_record_path)
+                        regular_recorded_file=files[-1]
+                        last_regular_record_time = dt_now 
+                                        
+                    if result == False:#検知されなかったとき
+                        if regular_recorded_file in read_files:
+                            read_files.remove(regular_recorded_file) #定時記録用写真は削除しないように除く
+                        with lock:
+                            self.files_to_be_del+=read_files #削除予定のファイルに追加
+            except:
+                print("error in loop")
             
-            
-            time.sleep(0.2)
+            time.sleep(0.01)
 
     #botプロセスと通信する関数。スレッド立てて動かす
     def socket_client(self):
@@ -401,4 +409,4 @@ def communicate_bot():
 path = input("folder path=")
 num = int(input("num for detection"))
 camera = cameras(path, num)
-camera.process("a")
+camera.process("s")
