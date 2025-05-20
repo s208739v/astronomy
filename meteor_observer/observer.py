@@ -131,7 +131,7 @@ class cameras():
         self.folder_path=path #保存フォルダ
         self.num=num #１回の検知処理に使うフレーム数
         
-        self.regular_record_interval = 60*60*0 + 60*30 + 0 #定時記録の間隔を秒で指定
+        self.regular_record_interval = 60*60*0 + 60*10 + 0 #定時記録の間隔を秒で指定
         
         #定時記録を保存するパス
         self.regular_record_path = self.folder_path + "/regular_record"
@@ -142,18 +142,23 @@ class cameras():
         
         self.start_time = "22:00" #撮影開始時刻
         self.end_time = "04:00" #撮影終了時刻
-        
-    def is_night(self): #夜間のみ動くように判定を入れる
+        self.current_is_night = False
+        self.rtsp_url="rtsp://6199:4003@192.168.137.12/live"
+    
+    #夜間のみ動くように判定を入れる   
+    def is_night(self): 
         """夜間の場合にTrueを返す"""
         now = datetime.datetime.now().time()
         return now >= datetime.datetime.strptime(self.start_time, "%H:%M").time() or now < datetime.datetime.strptime(self.end_time, "%H:%M").time()
-
+    
+    #フレームを保存する(opencvでダイレクトにカメラ画像にアクセスするとき)
     def organize_frames(self):
         while(True):
             time.sleep(0.2)
             if len(self.frames_to_be_saved)!=0:
                 self.save_frames()
-            
+    
+    #フレームを保存する(opencvでダイレクトにカメラ画像にアクセスするとき)
     def save_frames(self):
         with lock:
             ftbs = self.frames_to_be_saved.copy()
@@ -174,12 +179,15 @@ class cameras():
                     #cv2.imwrite(fotbs[i]+"/"+str(fitbs[i][j])+".jpg" ,ftbs[i][j], [cv2.IMWRITE_JPEG_QUALITY, 80])
                 except:
                     pass
-                   
+    
+    
+    #画像ファイルの読み込み(sharpcap)     
     def read_imgs(self, folder_path):
         files=glob.glob(folder_path)
         return files
     
     
+    #ファイルの保存と削除（sharpcap）
     def organize_files(self):
         while True:
             time.sleep(0.1)
@@ -189,13 +197,16 @@ class cameras():
             if len(self.files_to_be_saved)!=0:
                 self.save_detected_result()
 
+    
+    #ファイル削除の関数(sharpcap)
     def delete_pictures(self):
         with lock:
             ftpd = self.files_to_be_del.copy()
             self.files_to_be_del = []
         for path in ftpd:
             os.remove(path)
-        
+    
+    #検知画像の保存（sharpcap）
     def save_detected_result(self):
         with lock:
             ftbs = self.files_to_be_saved.copy()
@@ -232,6 +243,7 @@ class cameras():
                 self.image_processer.detect_meteor()
                 img_list = []
     
+    #ファイル名からindex読み取り(sharpcap)
     def read_file_index(self, filename):
         file_index = int((filename.split("_")[-1]).replace(".png", ""))
         return file_index
@@ -240,8 +252,9 @@ class cameras():
         file_base = filename.split("_")[0]
         return file_base
     
+    #RTSP対応カメラ用
     def rtsp_live(self):
-        capture = cv2.VideoCapture('rtsp://6199:4003@192.168.137.20/live')
+        capture = cv2.VideoCapture(self.rtsp_url)
         #sharpcapがフォルダに保存した画像をリアルタイムに取得して処理する関数
         folder_path=self.folder_path
         
@@ -251,14 +264,30 @@ class cameras():
         
         while(1):
             try:
-                if self.is_night() == False:
+                if self.is_night() == False and self.current_is_night == False: #昼間
                     continue
-                
+                elif self.is_night() == False and self.current_is_night == True: #夜から朝になったとき、接続を切る
+                    self.current_is_night = False
+                    print("Night is over!!" )
+                    capture.release()
+                    continue
+                elif self.is_night() == True and self.current_is_night == False: #昼間から夜に変わったとき、再接続。古いフレームが残っていないように数フレーム分無視
+                    self.current_is_night = True
+                    capture.release()
+                    print("Night has come!!" )
+                    time.sleep(1)
+                    capture = cv2.VideoCapture(self.rtsp_url)
+                    #古いイメージを捨てる
+                    for _ in range(100):
+                        ret, _ = capture.read()
+                        if not ret:
+                            break
+                                    
                 if not capture.isOpened(): #RTSPの接続が切れてた時再接続する
                     print("Reopening RTSP connection...")
                     capture.release()
                     time.sleep(1)
-                    capture = cv2.VideoCapture('rtsp://6199:4003@192.168.137.20/live')
+                    capture = cv2.VideoCapture(self.rtsp_url)
                     continue
                 
                 dt_now = datetime.datetime.now() #現在時刻取得
@@ -290,16 +319,18 @@ class cameras():
                     last_regular_record_time = dt_now
                 time.sleep(0.01)   
                 
-            except:
-                print("Error in while loop")
+            except Exception as e:
+                print(f"Error in while loop. Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"Error detail: {e}")
                 capture.release()
                 time.sleep(1)
-                capture = cv2.VideoCapture('rtsp://6199:4003@192.168.137.20/live')
+                capture = cv2.VideoCapture(self.rtsp_url)
                 pass
 
-
+    
+    #sharpcapがフォルダに保存した画像をリアルタイムに取得して処理する関数
     def sharpcap_live(self):
-        #sharpcapがフォルダに保存した画像をリアルタイムに取得して処理する関数
+        
         folder_path=self.folder_path
         
         num=self.num
@@ -372,38 +403,40 @@ class cameras():
 
     #botプロセスと通信する関数。スレッド立てて動かす
     def socket_client(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((ip, port))
-
         print("Connected!!!!!")
 
         while True:
-            print("<メッセージを入力してください>")
-            message = input('>>>')
-            if not message:
-                s.send("quit".encode("utf-8"))
-                break
-            s.send(message.encode("utf-8"))
-            receive = s.recv(4096).decode()
-            print(receive + "\n")
-        s.close()
+            try:
+                print("<メッセージを入力してください>")
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.connect((ip, port))
+                message = input('>>>')
+                if not message:
+                    s.send("quit".encode("utf-8"))
+                    break
+                s.send(message.encode("utf-8"))
+                s.close()
+            except Exception as e:
+                print(e)
+                time.sleep(1)
 
-    def process(self, camera="s"):
+    #全体のプロセスを実行する関数
+    def process(self, camera="a"):
         if camera=="s": #sharpcap
             thread1 = threading.Thread(target=self.sharpcap_live)
             thread2 = threading.Thread(target=self.organize_files)
         elif camera=="a": #atomcam
             thread1 = threading.Thread(target=self.rtsp_live)
             thread2 = threading.Thread(target=self.organize_frames)     
-        #thread3 = threading.Thread(target=self.socket_client_files)
+        thread3 = threading.Thread(target=self.socket_client)
         
         thread1.start()
         thread2.start()
         #thread3.start()
         
         thread1.join()
-        thread2.join() 
-        #thread3.join()  
+        thread2.join()
+        #thread3.join()
 
 def communicate_bot():
     #botのプロセスと通信する
