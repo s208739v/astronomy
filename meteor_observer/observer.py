@@ -322,8 +322,13 @@ class cameras():
             except Exception as e:
                 print(f"Error in while loop. Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"Error detail: {e}")
+                
+                print("img_list=",img_list)
+                for i in range(len(img_list)):
+                    print("img=",img_list[i])
+                
                 capture.release()
-                time.sleep(1)
+                time.sleep(120)
                 capture = cv2.VideoCapture(self.rtsp_url)
                 pass
 
