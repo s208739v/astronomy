@@ -292,6 +292,17 @@ class cameras():
                 
                 dt_now = datetime.datetime.now() #現在時刻取得
                 ret, frame = capture.read()
+                
+                # ret が False の場合、または frame が None の場合、フレームの読み込みに失敗
+                if not ret:
+                    print("フレームを読み込めませんでした。ストリームの終わりか、エラーです。")
+                    continue # ループを終了するか、再試行するなどの処理をここに追加
+
+                if frame is None:
+                    print("読み込まれたフレームがNoneです。")
+                    # ここでエラー処理や再試行のロジックを追加できます
+                    continue # 次のフレームの読み込みに進む
+
 
                 img_list.append(frame)
                 #検知に必要な枚数がたまったら処理開始
