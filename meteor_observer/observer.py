@@ -306,7 +306,6 @@ class cameras():
                     # ここでエラー処理や再試行のロジックを追加できます
                     continue # 次のフレームの読み込みに進む
 
-
                 img_list.append(frame)
                 #検知に必要な枚数がたまったら処理開始
                 if len(img_list)>num-1:
@@ -324,7 +323,6 @@ class cameras():
                     img_list = []
 
                 #定時記録
-                
                 if (dt_now - last_regular_record_time).seconds > self.regular_record_interval:
                     with lock:
                         self.frames_to_be_saved.append([frame])
@@ -332,7 +330,7 @@ class cameras():
                         self.files_to_be_saved.append([dt_now.strftime('%d-%H_%M_%S')])
                     last_regular_record_time = dt_now
                 time.sleep(0.01)   
-                
+    
             except Exception as e:
                 print(f"Error in while loop. Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"Error detail: {e}")
@@ -344,7 +342,6 @@ class cameras():
                 capture.release()
                 time.sleep(120)
                 capture = cv2.VideoCapture(self.rtsp_url)
-                pass
 
     
     #sharpcapがフォルダに保存した画像をリアルタイムに取得して処理する関数
