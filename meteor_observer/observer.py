@@ -282,13 +282,16 @@ class cameras():
                         ret, _ = capture.read()
                         if not ret:
                             break
-                                    
-                if not capture.isOpened(): #RTSPの接続が切れてた時再接続する
-                    print("Reopening RTSP connection...")
-                    capture.release()
-                    time.sleep(1)
-                    capture = cv2.VideoCapture(self.rtsp_url)
                     continue
+                                   
+                if not ret or frame is None:
+                    print(f"フレームの読み込みに失敗しました。接続が切れた可能性があります。5秒後に再接続を試みます。 Time: {datetime.datetime.now()}")
+                    capture.release()  # 現在のキャプチャオブジェクトを解放
+                    time.sleep(5)      # カメラやネットワークが復旧するのを待つ
+                    capture = cv2.VideoCapture(self.rtsp_url) # 再接続を試みる
+                    print("再接続を試行しました。")
+                    img_list.clear() # 溜まっていたリストをクリア
+                    continue # ループの先頭に戻る
                 
                 dt_now = datetime.datetime.now() #現在時刻取得
                 ret, frame = capture.read()
