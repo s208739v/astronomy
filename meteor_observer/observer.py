@@ -283,7 +283,11 @@ class cameras():
                         if not ret:
                             break
                     continue
-                                   
+                                
+                dt_now = datetime.datetime.now() #現在時刻取得
+                ret, frame = capture.read()
+
+                # ret が False の場合、または frame が None の場合、フレームの読み込みに失敗               
                 if not ret or frame is None:
                     print(f"フレームの読み込みに失敗しました。接続が切れた可能性があります。5秒後に再接続を試みます。 Time: {datetime.datetime.now()}")
                     capture.release()  # 現在のキャプチャオブジェクトを解放
@@ -291,20 +295,7 @@ class cameras():
                     capture = cv2.VideoCapture(self.rtsp_url) # 再接続を試みる
                     print("再接続を試行しました。")
                     img_list.clear() # 溜まっていたリストをクリア
-                    continue # ループの先頭に戻る
-                
-                dt_now = datetime.datetime.now() #現在時刻取得
-                ret, frame = capture.read()
-                
-                # ret が False の場合、または frame が None の場合、フレームの読み込みに失敗
-                if not ret:
-                    print("フレームを読み込めませんでした。ストリームの終わりか、エラーです。")
-                    continue # ループを終了するか、再試行するなどの処理をここに追加
-
-                if frame is None:
-                    print("読み込まれたフレームがNoneです。")
-                    # ここでエラー処理や再試行のロジックを追加できます
-                    continue # 次のフレームの読み込みに進む
+                    continue # ループの先頭に戻る      
 
                 img_list.append(frame)
                 #検知に必要な枚数がたまったら処理開始
