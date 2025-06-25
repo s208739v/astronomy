@@ -13,6 +13,8 @@ import shutil
 import threading
 import datetime
 import socket
+import sys
+import atexit
 
 ip = "127.0.0.1"
 port = 8000
@@ -449,8 +451,34 @@ def communicate_bot():
     #botのプロセスと通信する
     pass
 
+#ChatGPTが考えたログを出力するやつ
+class Tee:
+    def __init__(self, log_file_path):
+        self.terminal = sys.__stdout__
+        self.log = open(log_file_path, "a", encoding="utf-8")
 
-path = input("folder path=")
-num = int(input("num for detection"))
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
+
+# ログファイル作成
+log_filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log"
+sys.stdout = sys.stderr = Tee(log_filename)
+
+atexit.register(sys.stdout.close)
+
+# 入力プロンプト表示
+print("folder path=", end="", file=sys.__stdout__, flush=True)
+path = input()
+print("num for detection", end="", file=sys.__stdout__, flush=True)
+num = int(input())
 camera = cameras(path, num)
 camera.process("a")
