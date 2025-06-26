@@ -20,7 +20,7 @@ port = 8000
 class Process_image():
     
     def __init__(self):
-        self.min_length = 10
+        self.min_length = 30
         self.save_path = ""
         
     def detect_line(self, img, min_length):
@@ -131,7 +131,7 @@ class cameras():
         self.folder_path=path #保存フォルダ
         self.num=num #１回の検知処理に使うフレーム数
         
-        self.regular_record_interval = 60*60*0 + 60*10 + 0 #定時記録の間隔を秒で指定
+        self.regular_record_interval = 60*60*0 + 60*1 + 0 #定時記録の間隔を秒で指定
         
         #定時記録を保存するパス
         self.regular_record_path = self.folder_path + "/regular_record"
@@ -140,10 +140,10 @@ class cameras():
         except:
             pass
         
-        self.start_time = "22:00" #撮影開始時刻
+        self.start_time = "17:51" #撮影開始時刻
         self.end_time = "04:00" #撮影終了時刻
         self.current_is_night = False
-        self.rtsp_url="rtsp://6199:4003@192.168.137.12/live"
+        self.rtsp_url="rtsp://6199:4003@192.168.137.144/live"
     
     #夜間のみ動くように判定を入れる   
     def is_night(self): 
