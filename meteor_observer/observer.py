@@ -109,7 +109,13 @@ class Process_image():
     def save_movie(self, img_list, pathname):
         #画像リストから動画を作成する。
 
-        size = (self.WIDTH, self.HEIGHT)
+        # 最初の画像から高さと幅を取得
+        # img.shape は (高さ, 幅, [チャンネル数]) の順
+        height, width = img_list[0].shape[:2]
+        
+        # VideoWriterで使うサイズは (幅, 高さ) の順
+        size = (width, height)
+        
         fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
 
         video = cv2.VideoWriter(pathname, fourcc, self.FPS, size)
@@ -130,7 +136,13 @@ class cameras():
         
         
         self.folders_to_be_saved = [] #各写真を保存するフォルダ名を入れる（時刻）        
-        self.folder_path=path #保存フォルダ
+        
+        dt_now = datetime.datetime.now()
+        # YYYY-MM-DD 形式
+        date_string = dt_now.strftime('%Y-%m-%d')
+        self.folder_path=path+"/"+date_string #保存フォルダ
+        os.mkdir(self.folder_path)#保存フォルダ作成
+        
         self.num=num #１回の検知処理に使うフレーム数
         
         self.regular_record_interval = 60*60*0 + 60*10 + 0 #定時記録の間隔を秒で指定
@@ -181,6 +193,13 @@ class cameras():
                     #cv2.imwrite(fotbs[i]+"/"+str(fitbs[i][j])+".jpg" ,ftbs[i][j], [cv2.IMWRITE_JPEG_QUALITY, 80])
                 except:
                     pass
+            
+            #動画保存
+            if len(ftbs[i]) > 1:#定時記録でない時
+                try:
+                    self.image_processer.save_movie(ftbs[i],fotbs[i]+"/detected_video.mp4")
+                except:
+                    print("video_save_error")
     
     
     #画像ファイルの読み込み(sharpcap)     
