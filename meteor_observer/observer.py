@@ -158,6 +158,8 @@ class cameras():
         self.end_time = "04:00" #撮影終了時刻
         self.current_is_night = False
         self.rtsp_url="rtsp://6199:4003@192.168.137.144/live"
+        
+        self.notification_queue = [] #botへ通知する用のキュー
     
     #夜間のみ動くように判定を入れる   
     def is_night(self): 
@@ -198,6 +200,7 @@ class cameras():
             if len(ftbs[i]) > 1:#定時記録でない時
                 try:
                     self.image_processer.save_movie(ftbs[i],fotbs[i]+"/detected_video.mp4")
+                    self.notification_queue.append(fotbs[i]+"/detected_video.mp4")
                 except:
                     print("video_save_error")
     
@@ -430,23 +433,21 @@ class cameras():
             time.sleep(0.01)
 
     #botプロセスと通信する関数。スレッド立てて動かす
-    def socket_client(self):
-        print("Connected!!!!!")
-
+    def bot_socket_client(self):
         while True:
-            try:
-                print("<メッセージを入力してください>")
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.connect((ip, port))
-                message = input('>>>')
-                if not message:
-                    s.send("quit".encode("utf-8"))
-                    break
-                s.send(message.encode("utf-8"))
-                s.close()
-            except Exception as e:
-                print(e)
-                time.sleep(1)
+            if len(self.notification_queue)!=0: #検知されているとき
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.connect((ip, port))
+                    
+                    message = self.notification_queue[0]
+                    s.send(message.encode("utf-8"))
+                    s.close()
+                    self.notification_queue.pop(0) #送ったやつは削除
+                    
+                except Exception as e:
+                    print(e)
+                    time.sleep(1)
 
     #全体のプロセスを実行する関数
     def process(self, camera="a"):
@@ -456,15 +457,15 @@ class cameras():
         elif camera=="a": #atomcam
             thread1 = threading.Thread(target=self.rtsp_live)
             thread2 = threading.Thread(target=self.organize_frames)     
-        thread3 = threading.Thread(target=self.socket_client)
+        thread3 = threading.Thread(target=self.bot_socket_client)
         
         thread1.start()
         thread2.start()
-        #thread3.start()
+        thread3.start()
         
         thread1.join()
         thread2.join()
-        #thread3.join()
+        thread3.join()
 
 def communicate_bot():
     #botのプロセスと通信する

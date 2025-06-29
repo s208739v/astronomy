@@ -15,8 +15,6 @@ while True:
 		s.send("quit".encode("utf-8"))
 		break
 	s.send(message.encode("utf-8"))
-	receive = s.recv(4096).decode()
-	print(receive + "\n")
 	
 s.close()
 
