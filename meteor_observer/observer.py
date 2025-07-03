@@ -201,8 +201,8 @@ class cameras():
                 try:
                     self.image_processer.save_movie(ftbs[i],fotbs[i]+"/detected_video.mp4")
                     self.notification_queue.append(fotbs[i]+"/detected_video.mp4")
-                except:
-                    print("video_save_error")
+                except Exception as e:
+                    print("video_save_error", e)
     
     
     #画像ファイルの読み込み(sharpcap)     
