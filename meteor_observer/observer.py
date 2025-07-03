@@ -344,7 +344,7 @@ class cameras():
                         self.folders_to_be_saved.append(self.regular_record_path)
                         self.files_to_be_saved.append([dt_now.strftime('%d-%H_%M_%S')])
                     last_regular_record_time = dt_now
-                time.sleep(0.01)   
+                time.sleep(0.03)   
     
             except Exception as e:
                 print(f"Error in while loop. Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -457,15 +457,15 @@ class cameras():
         elif camera=="a": #atomcam
             thread1 = threading.Thread(target=self.rtsp_live)
             thread2 = threading.Thread(target=self.organize_frames)     
-        thread3 = threading.Thread(target=self.bot_socket_client)
+        #thread3 = threading.Thread(target=self.bot_socket_client)
         
         thread1.start()
         thread2.start()
-        thread3.start()
+        #thread3.start()
         
         thread1.join()
         thread2.join()
-        thread3.join()
+        #thread3.join()
 
 def communicate_bot():
     #botのプロセスと通信する
