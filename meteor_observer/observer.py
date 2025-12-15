@@ -24,6 +24,7 @@ class Process_image():
     def __init__(self):
         self.min_length = 30
         self.save_path = ""
+        self.FPS=15
         
     def detect_line(self, img, min_length):
         """画像上の線状のパターンを流星として検出する。

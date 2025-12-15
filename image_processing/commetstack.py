@@ -10,13 +10,21 @@ import time
 def read_imgs(folder_path):
   files=glob.glob(folder_path)
   return files
-
+"""
 def crop(img,left_upper,h,w):
   
   x = int(left_upper[0])
   y = int(left_upper[1])
   print(x,y)
   return img[x:x+h, y:y+w, :]
+"""
+
+def crop(img, left_upper, h, w):
+    # OpenCV準拠: left_upper = (x, y)
+    x = int(left_upper[0])  # 列方向
+    y = int(left_upper[1])  # 行方向
+    print("Cropping (x, y) =", x, y)
+    return img[y:y+h, x:x+w, :]
 
 #ヒストグラムをプロットする
 def plot_hist(img, channel, plot=None):
@@ -137,105 +145,119 @@ def estimate_and_subtrack_background2(img, func):
   
   return img.astype(np.uint8), base2.astype(np.uint8)
 
-def matching(img,templ, left_upper, area_size): #元画像、テンプレート画像、テンプレート画像が切り出されたときの左上座標、捜索ウィンドウサイズ
-  
-  imgs = [img] #回転させた画像を入れる
-  angles = [0]
-  vals = []
-  maxLocs = []
-  theta_max = 0.01
-  num = 10
-  
-  width = img.shape[1]
-  height = img.shape[0]
-  
-  for i in range(int(num/2)):
-    angle = (i+1)*theta_max/(num/2)
-    
-    M = cv2.getRotationMatrix2D((width/2,height/2),angle,1)
-    afin_img = cv2.warpAffine(img.astype(np.float32), M.astype(np.float32), (width, height))
-    imgs.append(afin_img)
-    angles.append(angle)
-    
-    M = cv2.getRotationMatrix2D((width/2,height/2),-angle,1)
-    afin_img = cv2.warpAffine(img.astype(np.float32), M.astype(np.float32), (width, height))
-    imgs.append(afin_img)
-    angles.append(-angle)
-    
-  #templ_size=np.array([templ.shape[0], templ.shape[1]])
-  #img_left_upper = left_upper+templ_size/2-area_size/2
-  #mask = np.zeros(img.shape,dtype = np.uint8)
-  #mask = cv2.rectangle(mask, (int(img_left_upper[0]),int(img_left_upper[1])), (int(img_left_upper[0]+area_size[0]),int(img_left_upper[1]+area_size[1])), (255, 255, 255), -1)
-  
-  for img_rot in imgs:
-    result = cv2.matchTemplate(img_rot.astype(np.uint8),                  #対象画像
-                              templ,                #テンプレート画像
-                              cv2.TM_CCOEFF_NORMED  #類似度の計算方法
-                              )
-    minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
-    vals.append(maxVal)
-    maxLocs.append(maxLoc)
-  
-  max_index = np.argmax(np.array(vals))
-  maxLoc=[maxLocs[max_index]]
-  max_angle = angles[max_index]
-  """
-  #類似度の閾値
-  threshold =0.90
-  #類似度が閾値以上の座標を取得
-  match_y, match_x = np.where(result >= threshold)
 
+def matching(img, templ, left_upper, area_size):
+    imgs = [img]
+    angles = [0]
+    vals = []
+    maxLocs = []
+    theta_max = 0.01
+    num = 10
 
-  #テンプレート画像のサイズ
-  w = templ.shape[1]
-  h = templ.shape[0]
+    width = img.shape[1]
+    height = img.shape[0]
 
-  #対象画像をコピー
-  dst = img.copy()
+    for i in range(int(num/2)):
+        angle = (i+1)*theta_max/(num/2)
 
-  #マッチした箇所に赤枠を描画
-  #赤枠の右下の座標は左上の座標（x,y)にテンプレート画像の幅、高さ(w,h）を足す。
-  for x,y in zip(match_x, match_y):
-      cv2.rectangle(dst,        #対象画像
-                    (x,y),      #マッチした箇所の左上座標
-                    (x+w, y+h), #マッチした箇所の右下座標
-                    (0,0,225),  #線の色
-                    2           #線の太さ
-                    )
-  cv2.rectangle(dst,        #対象画像
-                (maxLoc[0],maxLoc[1]),      #マッチした箇所の左上座標
-                (maxLoc[0]+w, maxLoc[1]+h), #マッチした箇所の右下座標
-                (0,0,225),  #線の色
-                2           #線の太さ
-                )
-  """
-  #plt.imshow(cv2.cvtColor(dst,cv2.COLOR_BGR2RGB))
-  #plt.show()
-  return np.array([maxLoc[0][1],maxLoc[0][0]]), max_angle
+        M = cv2.getRotationMatrix2D((width/2, height/2), angle, 1)
+        imgs.append(cv2.warpAffine(img.astype(np.float32), M, (width, height)))
+        angles.append(angle)
 
+        M = cv2.getRotationMatrix2D((width/2, height/2), -angle, 1)
+        imgs.append(cv2.warpAffine(img.astype(np.float32), M, (width, height)))
+        angles.append(-angle)
 
-def stack(img_base, img, x, y, angle, i):
+    for img_rot in imgs:
+        result = cv2.matchTemplate(img_rot.astype(np.uint8), templ, cv2.TM_CCOEFF_NORMED)
+        _, maxVal, _, maxLoc = cv2.minMaxLoc(result)
+        vals.append(maxVal)
+        maxLocs.append(maxLoc)
+
+    max_index = np.argmax(vals)
+    best_loc = maxLocs[max_index]
+    best_angle = angles[max_index]
+
+    # 🟢 OpenCV座標に合わせて (x, y) の順で返す
+    return np.array([best_loc[0], best_loc[1]]), best_angle
+
+def stack(img_base, img, dx, dy, angle, i):
+    height, width = img.shape[:2]
+
+    # 🟢 平行移動行列は [ [1, 0, dx], [0, 1, dy] ]
+    M_translate = np.array([[1, 0, dx],
+                            [0, 1, dy]], dtype=np.float32)
+
+    M_rotate = cv2.getRotationMatrix2D((width/2, height/2), -angle, 1)
+
+    # 🟢 順番を修正: 回転 → 平行移動
+    img_warped = cv2.warpAffine(img.astype(np.float32), M_rotate, (width, height))
+    img_warped = cv2.warpAffine(img_warped, M_translate, (width, height))
+
+    img_base += img_warped
+    preview = cv2.resize((img_base / (i + 1)).astype(np.uint8), (int(width * 0.5), int(height * 0.5)))
+    cv2.imshow("stacked", preview)
+    cv2.waitKey(50)
+
+    return img_base
+
+def select_roi_scaled(img, window_name="Select comet core", max_size=1000):
+    """大きな画像でも画面に収まるようにスケールダウンしてROIを選択する"""
+    h, w = img.shape[:2]
+    scale = 1.0
+
+    # もし画像が大きければ縮小
+    if max(h, w) > max_size:
+        scale = max_size / max(h, w)
+        img_resized = cv2.resize(img, (int(w * scale), int(h * scale)))
+    else:
+        img_resized = img.copy()
+
+    # ROIを選択
+    roi = cv2.selectROI(window_name, img_resized, fromCenter=False, showCrosshair=True)
+    cv2.destroyAllWindows()
+
+    # ROIが0の場合（キャンセル）
+    if roi == (0, 0, 0, 0):
+        print("ROI選択がキャンセルされました。")
+        return None
+
+    # 座標を元のスケールに戻す
+    x, y, rw, rh = roi
+    x = int(x / scale)
+    y = int(y / scale)
+    rw = int(rw / scale)
+    rh = int(rh / scale)
+
+    return (x, y, rw, rh)
   
-  affin_mat = np.array([[1, 0, y],
-                   [0, 1, x]])
-  width = img.shape[1]
-  height = img.shape[0]
-  
-  M = cv2.getRotationMatrix2D((width/2,height/2),-angle,1)
-  afin_img = cv2.warpAffine(img.astype(np.float32), M.astype(np.float32), (width, height))
-  afin_img = cv2.warpAffine(img.astype(np.float32), affin_mat.astype(np.float32), (width, height))
-  print(afin_img.dtype)
-  
-  img_base+=afin_img
-  cv2.imshow("stacked", cv2.resize((img_base/(i+1)).astype(np.uint8), (int(img.shape[1]*0.5), int(img.shape[0]*0.5))))
-  cv2.waitKey(50)
-  return img_base
 
-
-files = read_imgs(r"D:\SharpCap Captures\2024-10-20\Capture\19_41_31\rawframes/*png*")
+files = read_imgs(r"D:\SharpCap Captures\2025-10-30\Capture\18_02_45\rawframes/*png*")
+print(files)
 img = cv2.imread(files[0])
 img_base = np.zeros((img.shape[0],img.shape[1],3))
 
+
+min_val,max_val = plot_hist(img,0)
+tone_list_linear = tone_curve_linear(min_val, max_val)
+
+img2 = cv2.LUT(img, tone_list_linear)
+# ======== ここを追加 ========
+# GUIでコマの部分を指定
+print("最初のフレームから彗星のコマ部分を選択してください。")
+roi = select_roi_scaled(img2, "Select comet core", max_size=1000)
+if roi is None:
+    exit()
+x, y, w, h = roi
+
+left_upper = np.array([x, y]) 
+img_cropped = crop(img, left_upper, h, w)
+cv2.imshow("Selected Template", img_cropped)
+cv2.waitKey(500)
+# ===========================
+
+
+left_upper2 = left_upper.copy()  # ← 追加
 for i in range(len(files)):
   #if i%10!=0:
   #  continue
@@ -257,23 +279,21 @@ for i in range(len(files)):
   #cv2.waitKey(2000)
   
   if i == 0:
-    left_upper = np.array([550,1620])
     dx=0
     dy=0
     angle = 0
   else:
-    left_upper2, angle = matching(img_subtracted, img_cropped, left_upper,np.array([600,600]))
-    print(left_upper)
-    dx = left_upper2[0]-left_upper[0] 
-    dy = left_upper2[1]-left_upper[1] 
+    left_upper2, angle = matching(img_subtracted, img_cropped, left_upper, np.array([600,600]))
+    dx = left_upper2[0] - left_upper[0]
+    dy = left_upper2[1] - left_upper[1]
+    print("dx, dy, angle =", dx, dy, angle)
   
-  print("dx,dy,angle=", dx,dy,angle)
+  img_base = stack(img_base, img_subtracted, -dx, -dy, angle, i)
+  left_upper = left_upper2.copy()  # 🟢 更新を忘れずに！
   
-  stack(img_base, img_subtracted, -dx, -dy, angle, i)
-  left_upper_pre = left_upper
   if i%20 == 0:
     cv2.imwrite(r"C:/Users/riopo/Downloads/"+str(i)+".png" ,(img_base/(i+1)).astype(np.uint8))
-  
-  img_cropped = crop((img_base/(i+1)).astype(np.uint8), left_upper, 150,250)
+
+  img_cropped = crop((img_base/(i+1)).astype(np.uint8), left_upper, h, w)
   cv2.imshow("", img_cropped )
   cv2.waitKey(50)
